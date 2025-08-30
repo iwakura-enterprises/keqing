@@ -1,0 +1,8 @@
+app:
+  version: 1.0.0
+  name: Keqing
+  description: "Production build"
+  strings:
+    - "Hello, World!"
+    - "Welcome to Keqing's configuration."
+    - "This is a sample string."

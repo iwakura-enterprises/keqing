@@ -1,0 +1,10 @@
+{
+  "appName": "Keqing",
+  "appVersion": "1.0.0",
+  "appDescription": "A sample application configuration file",
+  "strings": [
+    "Hello, World!",
+    "Welcome to Keqing application.",
+    "This is a sample configuration file."
+  ]
+}

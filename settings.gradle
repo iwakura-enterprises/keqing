@@ -1,0 +1,4 @@
+rootProject.name = 'keqing'
+include 'keqing-core'
+include 'keqing-gson'
+include 'keqing-snakeyaml'
