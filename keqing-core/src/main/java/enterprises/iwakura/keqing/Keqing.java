@@ -1,10 +1,5 @@
 package enterprises.iwakura.keqing;
 
-import enterprises.iwakura.keqing.util.ResourceUtils;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.Synchronized;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -12,14 +7,22 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.stream.Stream;
+
+import enterprises.iwakura.keqing.util.ResourceUtils;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.Synchronized;
 
 /**
  * Main class for handling file bundles using the {@link Keqing} library.
  * <p>
- *     Usage:
- *     <pre>
+ * Usage:
+ * <pre>
  *         {@code
  *         Keqing keqing = new Keqing();
  *         // 1. Path to the language files without postfix and extension
@@ -38,7 +41,8 @@ import java.util.stream.Stream;
 public class Keqing {
 
     /**
-     * List of effective postfix priorities, including the default postfix if set, and always ending with an empty string.
+     * List of effective postfix priorities, including the default postfix if set, and always ending with an empty
+     * string.
      */
     protected final List<String> effectivePostfixPriorities = new ArrayList<>(Collections.singletonList(""));
 
@@ -58,9 +62,61 @@ public class Keqing {
     protected Serializer<?> serializer;
 
     /**
-     * Default postfix to use when none is specified.
+     * Loads files from the file system based on the provided file path template, postfix separator, and serializer.
+     *
+     * @param filePathTemplate the file path template without postfix and extension (e.g., "./data/lang" for files like
+     *                         "./data/lang_en.yaml")
+     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in
+     *                         'lang_en.yaml')
+     * @param serializer       the serializer instance to use for reading properties
+     * @return a new instance of {@link Keqing} with loaded files
+     * @throws IOException if an I/O error occurs during file loading
      */
-    protected String defaultPostfix;
+    public static Keqing loadFromFileSystem(String filePathTemplate, char postfixSeparator, Serializer<?> serializer)
+        throws IOException {
+        Keqing keqing = new Keqing();
+        keqing.reloadFromFileSystem(filePathTemplate, postfixSeparator, serializer);
+        return keqing;
+    }
+
+    /**
+     * Loads files from the resources based on the provided file path template, postfix separator, serializer, and class
+     * loader.
+     *
+     * @param filePathTemplate the file path template without postfix and extension (e.g., "lang/lang" for files like
+     *                         "lang/lang_en.yaml")
+     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in
+     *                         'lang_en.yaml')
+     * @param serializer       the serializer instance to use for reading properties
+     * @param classLoader      the class loader to use for loading resources
+     * @return a new instance of {@link Keqing} with loaded files
+     * @throws IOException if an I/O error occurs during resource loading
+     */
+    public static Keqing loadFromResources(String filePathTemplate, char postfixSeparator, Serializer<?> serializer,
+        ClassLoader classLoader) throws IOException {
+        Keqing keqing = new Keqing();
+        keqing.reloadFromResources(filePathTemplate, postfixSeparator, serializer, classLoader);
+        return keqing;
+    }
+
+    /**
+     * Loads files from the resources based on the provided file path template, postfix separator, and serializer. Uses
+     * the context class loader of the current thread.
+     *
+     * @param filePathTemplate the file path template without postfix and extension (e.g., "lang/lang" for files like
+     *                         "lang/lang_en.yaml")
+     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in
+     *                         'lang_en.yaml')
+     * @param serializer       the serializer instance to use for reading properties
+     * @return a new instance of {@link Keqing} with loaded files
+     * @throws IOException if an I/O error occurs during resource loading
+     */
+    public static Keqing loadFromResources(String filePathTemplate, char postfixSeparator, Serializer<?> serializer)
+        throws IOException {
+        Keqing keqing = new Keqing();
+        keqing.reloadFromResources(filePathTemplate, postfixSeparator, serializer);
+        return keqing;
+    }
 
     /**
      * Sets the list of postfix priorities.
@@ -68,31 +124,25 @@ public class Keqing {
      * @param postfixPriorities the list of postfix priorities to set
      */
     @Synchronized
-    public void setPostfixPriorities(List<String> postfixPriorities) {
+    public void setPostfixPriorities(Collection<String> postfixPriorities) {
         this.postfixPriorities.clear();
         this.postfixPriorities.addAll(postfixPriorities);
         updateEffectivePostfixes();
     }
 
     /**
-     * Sets the default postfix to use when none is specified.
-     *
-     * @param postfix the default postfix to set
+     * Uses all found postfixes from the loaded files as postfix priorities.
      */
-    @Synchronized
-    public void setDefaultPostfix(String postfix) {
-        this.defaultPostfix = postfix;
-        updateEffectivePostfixes();
+    public void useAllFoundPostfixes() {
+        setPostfixPriorities(serializer.getSerializedFileContents().keySet());
     }
 
     /**
-     * Updates the effective postfix priorities list based on the current default postfix and user-defined postfix priorities.
+     * Updates the effective postfix priorities list based on the current default postfix and user-defined postfix
+     * priorities.
      */
     protected void updateEffectivePostfixes() {
         this.effectivePostfixPriorities.clear();
-        if (defaultPostfix != null && !this.defaultPostfix.isEmpty()) {
-            this.effectivePostfixPriorities.add(this.defaultPostfix);
-        }
         this.effectivePostfixPriorities.addAll(this.postfixPriorities);
         this.effectivePostfixPriorities.add("");
     }
@@ -100,12 +150,12 @@ public class Keqing {
     /**
      * Reads a property from the serialized content using the specified postfix, path, and class type.
      *
-     * @param postfix the postfix to use for reading the property; if it exists in the effective priorities, it will be prioritized
-     * @param path the property path to read
-     * @param clazz the class type to which the property value should be converted
-     *
+     * @param postfix the postfix to use for reading the property; if it exists in the effective priorities, it will be
+     *                prioritized
+     * @param path    the property path to read
+     * @param clazz   the class type to which the property value should be converted
+     * @param <T>     the type of the property value
      * @return the property value if found and successfully converted, or null otherwise
-     * @param <T> the type of the property value
      */
     @Synchronized
     public <T> T readProperty(String postfix, String path, Class<T> clazz) {
@@ -114,18 +164,19 @@ public class Keqing {
         }
         boolean effectivePostfixExists = effectivePostfixPriorities.stream().anyMatch(p -> p.equals(postfix));
 
-        return serializer.readProperty(effectivePostfixExists ? null : postfix, effectivePostfixPriorities, path, clazz).orElse(null);
+        return serializer.readProperty(effectivePostfixExists ? null : postfix, effectivePostfixPriorities, path, clazz)
+            .orElse(null);
     }
 
     /**
      * Reads a list of properties from the serialized content using the specified postfix, path, and class type.
      *
-     * @param postfix the postfix to use for reading the property; if it exists in the effective priorities, it will be prioritized
-     * @param path the property path to read
-     * @param clazz the class type to which the property value should be converted
-     *
+     * @param postfix the postfix to use for reading the property; if it exists in the effective priorities, it will be
+     *                prioritized
+     * @param path    the property path to read
+     * @param clazz   the class type to which the property value should be converted
+     * @param <T>     the type of the property value inside the list
      * @return the list of properties if found and successfully converted, or null otherwise
-     * @param <T> the type of the property value inside the list
      */
     public <T> List<T> readPropertyList(String postfix, String path, Class<T> clazz) {
         T property = readProperty(postfix, path, clazz);
@@ -138,57 +189,52 @@ public class Keqing {
     }
 
     /**
-     * Reads a property from the serialized content using the default postfix, path, and class type. Uses the default postfix.
+     * Reads a property from the serialized content using the default postfix, path, and class type. Uses the default
+     * postfix.
      *
-     * @param path the property path to read
+     * @param path  the property path to read
      * @param clazz the class type to which the property value should be converted
-     *
+     * @param <T>   the type of the property value
      * @return the property value if found and successfully converted, or null otherwise
-     * @param <T> the type of the property value
-     *
      * @throws IllegalStateException if the default postfix is not set
      */
     @Synchronized
     public <T> T readProperty(String path, Class<T> clazz) {
-        if (defaultPostfix == null) {
-            throw new IllegalStateException("Default postfix is not set.");
-        }
-        return readProperty(defaultPostfix, path, clazz);
+        return readProperty(effectivePostfixPriorities.get(0), path, clazz);
     }
 
     /**
-     * Reads a list of properties from the serialized content using the default postfix, path, and class type. Uses the default postfix.
+     * Reads a list of properties from the serialized content using the default postfix, path, and class type. Uses the
+     * default postfix.
      *
-     * @param path the property path to read
+     * @param path  the property path to read
      * @param clazz the class type to which the property value should be converted
-     *
+     * @param <T>   the type of the property value inside the list
      * @return the list of properties if found and successfully converted, or null otherwise
-     * @param <T> the type of the property value inside the list
-     *
      * @throws IllegalStateException if the default postfix is not set
      */
     public <T> List<T> readPropertyList(String path, Class<T> clazz) {
-        if (defaultPostfix == null) {
-            throw new IllegalStateException("Default postfix is not set.");
-        }
-        return readPropertyList(defaultPostfix, path, clazz);
+        return readPropertyList(effectivePostfixPriorities.get(0), path, clazz);
     }
 
     /**
      * Loads files from the file system based on the provided file path template, postfix separator, and serializer.
      *
-     * @param filePathTemplate the file path template without postfix and extension (e.g., "./data/lang" for files like "./data/lang_en.yaml")
-     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in 'lang_en.yaml')
-     * @param serializer the serializer instance to use for reading properties
-     *
+     * @param filePathTemplate the file path template without postfix and extension (e.g., "./data/lang" for files like
+     *                         "./data/lang_en.yaml")
+     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in
+     *                         'lang_en.yaml')
+     * @param serializer       the serializer instance to use for reading properties
      * @throws IOException if an I/O error occurs during file loading
      */
     @Synchronized
-    public void loadFromFileSystem(String filePathTemplate, char postfixSeparator, Serializer<?> serializer) throws IOException {
+    public void reloadFromFileSystem(String filePathTemplate, char postfixSeparator, Serializer<?> serializer)
+        throws IOException {
         this.postfixSeparator = postfixSeparator;
         this.serializer = serializer;
 
-        // File path will be for example ./data/lang, where the files will be ./data/lang_en.yaml, ./data/lang_cs.properties, etc.
+        // File path will be for example ./data/lang, where the files will be ./data/lang_en.yaml, ./data/lang_cs
+        // .properties, etc.
         File fileTemplate = new File(filePathTemplate);
         Path directory = fileTemplate.getParentFile().toPath();
         String filePrefix = fileTemplate.getName();
@@ -201,7 +247,8 @@ public class Keqing {
                     String postfix = "";
                     int separatorIndex = fileName.indexOf(postfixSeparator, filePrefix.length());
                     if (separatorIndex != -1) {
-                        postfix = fileName.substring(separatorIndex + 1, fileName.length() - fileExtension.length() - 1);
+                        postfix = fileName.substring(separatorIndex + 1,
+                            fileName.length() - fileExtension.length() - 1);
                     }
                     try {
                         String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
@@ -215,17 +262,20 @@ public class Keqing {
     }
 
     /**
-     * Loads files from the resources based on the provided file path template, postfix separator, serializer, and class loader.
+     * Loads files from the resources based on the provided file path template, postfix separator, serializer, and class
+     * loader.
      *
-     * @param filePathTemplate the file path template without postfix and extension (e.g., "lang/lang" for files like "lang/lang_en.yaml")
-     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in 'lang_en.yaml')
-     * @param serializer the serializer instance to use for reading properties
-     * @param classLoader the class loader to use for loading resources
-     *
+     * @param filePathTemplate the file path template without postfix and extension (e.g., "lang/lang" for files like
+     *                         "lang/lang_en.yaml")
+     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in
+     *                         'lang_en.yaml')
+     * @param serializer       the serializer instance to use for reading properties
+     * @param classLoader      the class loader to use for loading resources
      * @throws IOException if an I/O error occurs during resource loading
      */
     @Synchronized
-    public void loadFromResources(String filePathTemplate, char postfixSeparator, Serializer<?> serializer, ClassLoader classLoader) throws IOException {
+    public void reloadFromResources(String filePathTemplate, char postfixSeparator, Serializer<?> serializer,
+        ClassLoader classLoader) throws IOException {
         this.postfixSeparator = postfixSeparator;
         this.serializer = serializer;
 
@@ -235,17 +285,22 @@ public class Keqing {
             filePathTemplate = filePathTemplate.substring(1);
         }
 
-        // Resource path will be for example /lang/lang, where the files will be /lang/lang_en.yaml, /lang/lang_cs.properties, etc.
-        String resourceDirectory = filePathTemplate.contains(directorySymbolUsed) ? filePathTemplate.substring(0, filePathTemplate.lastIndexOf(directorySymbolUsed)) : "";
-        String filePrefix = filePathTemplate.contains(directorySymbolUsed) ? filePathTemplate.substring(filePathTemplate.lastIndexOf(directorySymbolUsed) + 1) : filePathTemplate;
+        // Resource path will be for example /lang/lang, where the files will be /lang/lang_en.yaml, /lang/lang_cs
+        // .properties, etc.
+        String resourceDirectory = filePathTemplate.contains(directorySymbolUsed) ? filePathTemplate.substring(0,
+            filePathTemplate.lastIndexOf(directorySymbolUsed)) : "";
+        String filePrefix = filePathTemplate.contains(directorySymbolUsed) ? filePathTemplate.substring(
+            filePathTemplate.lastIndexOf(directorySymbolUsed) + 1) : filePathTemplate;
 
         ResourceUtils.listResourceFiles(resourceDirectory, classLoader).forEach(resourceFile -> {
-            String fileExtension = resourceFile.contains(".") ? resourceFile.substring(resourceFile.lastIndexOf('.') + 1) : "";
+            String fileExtension =
+                resourceFile.contains(".") ? resourceFile.substring(resourceFile.lastIndexOf('.') + 1) : "";
             if (resourceFile.startsWith(filePrefix) && serializer.supportsFileExtension(fileExtension)) {
                 String postfix = "";
                 int separatorIndex = resourceFile.indexOf(postfixSeparator, filePrefix.length());
                 if (separatorIndex != -1) {
-                    postfix = resourceFile.substring(separatorIndex + 1, resourceFile.length() - fileExtension.length() - 1);
+                    postfix = resourceFile.substring(separatorIndex + 1,
+                        resourceFile.length() - fileExtension.length() - 1);
                 }
                 try {
                     String resourcePath = (resourceDirectory.isEmpty() ? "" : (resourceDirectory + "/")) + resourceFile;
@@ -271,17 +326,20 @@ public class Keqing {
     }
 
     /**
-     * Loads files from the resources based on the provided file path template, postfix separator, and serializer.
-     * Uses the context class loader of the current thread.
+     * Loads files from the resources based on the provided file path template, postfix separator, and serializer. Uses
+     * the context class loader of the current thread.
      *
-     * @param filePathTemplate the file path template without postfix and extension (e.g., "lang/lang" for files like "lang/lang_en.yaml")
-     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in 'lang_en.yaml')
-     * @param serializer the serializer instance to use for reading properties
-     *
+     * @param filePathTemplate the file path template without postfix and extension (e.g., "lang/lang" for files like
+     *                         "lang/lang_en.yaml")
+     * @param postfixSeparator the character used to separate the postfix from the file name (e.g., '_' in
+     *                         'lang_en.yaml')
+     * @param serializer       the serializer instance to use for reading properties
      * @throws IOException if an I/O error occurs during resource loading
      */
     @Synchronized
-    public void loadFromResources(String filePathTemplate, char postfixSeparator, Serializer<?> serializer) throws IOException {
-        loadFromResources(filePathTemplate, postfixSeparator, serializer, Thread.currentThread().getContextClassLoader());
+    public void reloadFromResources(String filePathTemplate, char postfixSeparator, Serializer<?> serializer)
+        throws IOException {
+        reloadFromResources(filePathTemplate, postfixSeparator, serializer,
+            Thread.currentThread().getContextClassLoader());
     }
 }

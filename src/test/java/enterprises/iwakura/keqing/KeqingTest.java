@@ -15,15 +15,14 @@ public class KeqingTest {
     @Test
     @SneakyThrows
     public void testKeqing_properties() {
-        var keqing = new Keqing();
-        keqing.loadFromResources("/lang/lang", '_', new PropertiesSerializer());
+        var keqing = Keqing.loadFromResources("/lang/lang", '_', new PropertiesSerializer());
 
         var englishGreeting = keqing.readProperty("", "greeting", String.class);
         var czechGreeting = keqing.readProperty("cs", "greeting", String.class);
         var englishGoodbye = keqing.readProperty("", "goodbye", String.class);
         var missingCzechGoodbye = keqing.readProperty("cs", "goodbye", String.class);
 
-        keqing.setDefaultPostfix("cs");
+        keqing.setPostfixPriorities(List.of("cs"));
 
         var defaultGreeting = keqing.readProperty("greeting", String.class);
         var missingDefaultGoodbye = keqing.readProperty("goodbye", String.class);
@@ -45,9 +44,8 @@ public class KeqingTest {
     @Test
     @SneakyThrows
     public void testKeqing_json_test() {
-        var keqing = new Keqing();
-        keqing.loadFromResources("config", '-', new GsonSerializer(new Gson()));
-        keqing.setDefaultPostfix("test");
+        var keqing = Keqing.loadFromResources("config", '-', new GsonSerializer(new Gson()));
+        keqing.setPostfixPriorities(List.of("test"));
 
         var appName = keqing.readProperty("appName", String.class);
         var appVersion = keqing.readProperty("appVersion", String.class);
@@ -70,10 +68,8 @@ public class KeqingTest {
     @Test
     @SneakyThrows
     public void testKeqing_json_testDevPriorities() {
-        var keqing = new Keqing();
-        keqing.loadFromResources("config", '-', new GsonSerializer(new Gson()));
-        keqing.setDefaultPostfix("test");
-        keqing.setPostfixPriorities(List.of("dev"));
+        var keqing = Keqing.loadFromResources("config", '-', new GsonSerializer(new Gson()));
+        keqing.setPostfixPriorities(List.of("test", "dev"));
 
         var appName = keqing.readProperty("appName", String.class);
         var appVersion = keqing.readProperty("appVersion", String.class);
@@ -96,9 +92,8 @@ public class KeqingTest {
     @Test
     @SneakyThrows
     public void testKeqing_yaml_dev() {
-        var keqing = new Keqing();
-        keqing.loadFromResources("data/data", '-', new SnakeYamlSerializer());
-        keqing.setDefaultPostfix("dev");
+        var keqing = Keqing.loadFromResources("data/data", '-', new SnakeYamlSerializer());
+        keqing.setPostfixPriorities(List.of("dev"));
 
         var appName = keqing.readProperty("app.name", String.class);
         var appVersion = keqing.readProperty("app.version", String.class);

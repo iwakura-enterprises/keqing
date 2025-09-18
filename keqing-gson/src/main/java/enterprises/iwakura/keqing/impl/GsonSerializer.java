@@ -1,25 +1,28 @@
 package enterprises.iwakura.keqing.impl;
 
-import com.google.gson.*;
-import com.google.gson.reflect.TypeToken;
-import enterprises.iwakura.keqing.Keqing;
-import enterprises.iwakura.keqing.Serializer;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
+
+import enterprises.iwakura.keqing.Keqing;
+import enterprises.iwakura.keqing.Serializer;
+import lombok.Getter;
+import lombok.Setter;
+
 /**
  * Gson serializer for {@link Keqing}. Supports file types with ".json" extension.
  */
 @Getter
 @Setter
-@RequiredArgsConstructor
 public class GsonSerializer extends Serializer<JsonElement> {
 
     /**
@@ -32,11 +35,41 @@ public class GsonSerializer extends Serializer<JsonElement> {
      */
     protected final Gson gson;
 
+
     /**
-     * Creates a new instance of GsonSerializer with a default Gson configuration.
+     * Constructs a new GsonSerializer with a default Gson instance.
      */
     public GsonSerializer() {
-        this.gson = new Gson();
+        this(true, new Gson());
+    }
+
+    /**
+     * Constructs a new GsonSerializer with the specified Gson instance.
+     *
+     * @param gson the Gson instance to use for parsing
+     */
+    public GsonSerializer(Gson gson) {
+        this(true, gson);
+    }
+
+    /**
+     * Constructs a new GsonSerializer with the specified caching behavior and a default Gson instance.
+     *
+     * @param shouldCacheReads indicates whether read results should be cached
+     */
+    public GsonSerializer(boolean shouldCacheReads) {
+        this(shouldCacheReads, new Gson());
+    }
+
+    /**
+     * Constructs a new GsonSerializer with the specified caching behavior and Gson instance.
+     *
+     * @param shouldCacheReads indicates whether read results should be cached
+     * @param gson             the Gson instance to use for parsing
+     */
+    public GsonSerializer(boolean shouldCacheReads, Gson gson) {
+        super(shouldCacheReads);
+        this.gson = gson;
     }
 
     /**
@@ -48,11 +81,11 @@ public class GsonSerializer extends Serializer<JsonElement> {
     }
 
     /**
-     * Serializes the given content into a JsonElement using {@link JsonParser} and associates it with the specified postfix.
+     * Serializes the given content into a JsonElement using {@link JsonParser} and associates it with the specified
+     * postfix.
      *
      * @param postfix the postfix to associate with the serialized content
      * @param content the content to serialize
-     *
      * @throws IOException if an I/O error occurs during serialization
      */
     @Override
@@ -60,26 +93,36 @@ public class GsonSerializer extends Serializer<JsonElement> {
         try {
             serializedFileContents.put(postfix, JsonParser.parseString(content));
         } catch (Exception exception) {
-            throw new IOException(String.format("Failed to parse JSON content for postfix %s: %s", postfix, content), exception);
+            throw new IOException(String.format("Failed to parse JSON content for postfix %s: %s", postfix, content),
+                exception);
         }
     }
 
     /**
-     * Reads a property from the serialized JsonElement associated with the given postfix and path, merging multiple JsonElements if necessary. This will
-     * merge JsonObjects by deep merging and JsonArrays by concatenation.
+     * Reads a property from the serialized JsonElement associated with the given postfix and path, merging multiple
+     * JsonElements if necessary. This will merge JsonObjects by deep merging and JsonArrays by concatenation.
      *
-     * @param postfix the postfix associated with the serialized content
+     * @param postfix           the postfix associated with the serialized content
      * @param postfixPriorities the list of postfix priorities to consider if the specified postfix is not found
-     * @param path the property path to read
-     * @param clazz the class type to which the property value should be converted
-     *
-     * @return an Optional containing the property value if found and successfully converted, or an empty Optional otherwise
-     * @param <T> the type of the property value
+     * @param path              the property path to read
+     * @param clazz             the class type to which the property value should be converted
+     * @param <T>               the type of the property value
+     * @return an Optional containing the property value if found and successfully converted, or an empty Optional
+     * otherwise
      */
     @Override
     public <T> Optional<T> readProperty(String postfix, List<String> postfixPriorities, String path, Class<T> clazz) {
+        CacheKey cacheKey = new CacheKey(postfix, postfixPriorities, path, clazz);
+        Object cachedRead = readFromCache(cacheKey);
+
+        // If cached read is present, e.g. non-null Optional, return it (be it empty or non-empty)
+        if (cachedRead instanceof Optional) {
+            return (Optional<T>) cachedRead;
+        }
+
         List<JsonElement> jsonElements = new ArrayList<>();
-        String currentPostfix = postfix == null ? (!postfixPriorities.isEmpty() ? postfixPriorities.get(0) : null) : postfix;
+        String currentPostfix =
+            postfix == null ? (!postfixPriorities.isEmpty() ? postfixPriorities.get(0) : null) : postfix;
         int currentIndex = postfix != null ? -1 : 0;
 
         while (currentPostfix != null) {
@@ -97,31 +140,31 @@ public class GsonSerializer extends Serializer<JsonElement> {
         }
 
         if (jsonElements.isEmpty()) {
-            return Optional.empty();
+            return writeToCache(cacheKey, Optional.empty());
         }
 
         JsonElement firstNonNullElement = jsonElements.get(0);
 
         if (firstNonNullElement == null || firstNonNullElement.isJsonNull() || firstNonNullElement.isJsonPrimitive()) {
-            return Optional.ofNullable(parseElement(firstNonNullElement, clazz));
+            return writeToCache(cacheKey, Optional.ofNullable(parseElement(firstNonNullElement, clazz)));
         }
 
         if (firstNonNullElement.isJsonObject()) {
             JsonObject mergedJsonObject = mergeObjects(jsonElements);
-            return Optional.ofNullable(parseElement(mergedJsonObject, clazz));
+            return writeToCache(cacheKey, Optional.ofNullable(parseElement(mergedJsonObject, clazz)));
         }
 
         if (firstNonNullElement.isJsonArray()) {
             JsonArray mergedJsonArray = mergeArrays(jsonElements);
-            return Optional.ofNullable(parseElement(mergedJsonArray, clazz));
+            return writeToCache(cacheKey, Optional.ofNullable(parseElement(mergedJsonArray, clazz)));
         }
 
-        return Optional.empty();
+        return writeToCache(cacheKey, Optional.empty());
     }
 
     /**
-     * Merges a list of JsonElements into a single JsonObject by deep merging.
-     * Higher priority objects in the list will overwrite lower priority ones.
+     * Merges a list of JsonElements into a single JsonObject by deep merging. Higher priority objects in the list will
+     * overwrite lower priority ones.
      *
      * @param jsonElements the list of JsonElements to merge
      * @return the merged JsonObject
@@ -142,8 +185,8 @@ public class GsonSerializer extends Serializer<JsonElement> {
     }
 
     /**
-     * Merges a list of JsonElements into a single JsonArray by concatenation.
-     * Higher priority arrays in the list will appear first in the merged array.
+     * Merges a list of JsonElements into a single JsonArray by concatenation. Higher priority arrays in the list will
+     * appear first in the merged array.
      *
      * @param jsonElements the list of JsonElements to merge
      * @return the merged JsonArray
@@ -162,11 +205,9 @@ public class GsonSerializer extends Serializer<JsonElement> {
     }
 
     /**
-     * Deep merges the source JsonObject into the target JsonObject.
-     * If both source and target have a value for the same key:
-     * - If both values are JsonObjects, they are merged recursively.
-     * - If both values are JsonArrays, they are concatenated.
-     * - Otherwise, the source value overwrites the target value.
+     * Deep merges the source JsonObject into the target JsonObject. If both source and target have a value for the same
+     * key: - If both values are JsonObjects, they are merged recursively. - If both values are JsonArrays, they are
+     * concatenated. - Otherwise, the source value overwrites the target value.
      *
      * @param source the source JsonObject to merge from
      * @param target the target JsonObject to merge into
@@ -222,8 +263,8 @@ public class GsonSerializer extends Serializer<JsonElement> {
     }
 
     /**
-     * Returns the wrapper class for a given primitive class.
-     * If the provided class is not a primitive type, it returns the class itself.
+     * Returns the wrapper class for a given primitive class. If the provided class is not a primitive type, it returns
+     * the class itself.
      *
      * @param clazz the class to get the wrapper for
      * @return the corresponding wrapper class, or the original class if it's not primitive
@@ -282,7 +323,8 @@ public class GsonSerializer extends Serializer<JsonElement> {
     }
 
     /**
-     * This method is unsupported in GsonSerializer. Use {@link #readProperty(String, List, String, Class)} instead for correct JSON merging behavior.
+     * This method is unsupported in GsonSerializer. Use {@link #readProperty(String, List, String, Class)} instead for
+     * correct JSON merging behavior.
      *
      * @param postfix the postfix associated with the serialized content
      * @param path    the property path to read
@@ -293,6 +335,7 @@ public class GsonSerializer extends Serializer<JsonElement> {
      */
     @Override
     public <T> Optional<T> readProperty(String postfix, String path, Class<T> clazz) {
-        throw new UnsupportedOperationException("Use readProperty with postfixPriorities for correct JSON merging behavior.");
+        throw new UnsupportedOperationException(
+            "Use readProperty with postfixPriorities for correct JSON merging behavior.");
     }
 }

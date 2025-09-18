@@ -1,23 +1,27 @@
 package enterprises.iwakura.keqing.impl;
 
-import enterprises.iwakura.keqing.Keqing;
-import enterprises.iwakura.keqing.Serializer;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 
-import java.io.IOException;
-import java.util.*;
+import enterprises.iwakura.keqing.Keqing;
+import enterprises.iwakura.keqing.Serializer;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * SnakeYAML serializer for {@link Keqing}. Supports file types with ".yaml" and ".yml" extensions.
  */
 @Getter
 @Setter
-@RequiredArgsConstructor
 public class SnakeYamlSerializer extends Serializer<Object> {
 
     /**
@@ -40,14 +44,43 @@ public class SnakeYamlSerializer extends Serializer<Object> {
      * Constructs a new SnakeYamlSerializer with a default Yaml instance.
      */
     public SnakeYamlSerializer() {
-        this.yaml = new Yaml();
+        this(true, new Yaml());
     }
+
+    /**
+     * Constructs a new SnakeYamlSerializer with the specified Yaml instance.
+     *
+     * @param yaml the Yaml instance to use for parsing
+     */
+    public SnakeYamlSerializer(Yaml yaml) {
+        this(true, yaml);
+    }
+
+    /**
+     * Constructs a new SnakeYamlSerializer with the specified caching behavior and a default Yaml instance.
+     *
+     * @param shouldCacheReads indicates whether read results should be cached
+     */
+    public SnakeYamlSerializer(boolean shouldCacheReads) {
+        this(shouldCacheReads, new Yaml());
+    }
+
+    /**
+     * Constructs a new SnakeYamlSerializer with the specified caching behavior and Yaml instance.
+     *
+     * @param shouldCacheReads indicates whether read results should be cached
+     * @param yaml             the Yaml instance to use for parsing
+     */
+    public SnakeYamlSerializer(boolean shouldCacheReads, Yaml yaml) {
+        super(shouldCacheReads);
+        this.yaml = yaml;
+    }
+
 
     /**
      * Determines if the given file extension is supported by this serializer.
      *
      * @param extension the file extension to check
-     *
      * @return true if the extension is "yaml" or "yml" (case-insensitive), false otherwise
      */
     @Override
@@ -60,7 +93,6 @@ public class SnakeYamlSerializer extends Serializer<Object> {
      *
      * @param postfix the postfix to associate with the serialized content
      * @param content the content to serialize
-     *
      * @throws IOException if an I/O error occurs during serialization
      */
     @Override
@@ -69,26 +101,36 @@ public class SnakeYamlSerializer extends Serializer<Object> {
             Object data = yaml.load(content);
             serializedFileContents.put(postfix, data);
         } catch (Exception exception) {
-            throw new IOException(String.format("Failed to parse YAML content for postfix %s: %s", postfix, content), exception);
+            throw new IOException(String.format("Failed to parse YAML content for postfix %s: %s", postfix, content),
+                exception);
         }
     }
 
     /**
-     * Reads a property from the serialized YAML object associated with the given postfix and path,
-     * merging properties from multiple postfixes based on their priorities.
+     * Reads a property from the serialized YAML object associated with the given postfix and path, merging properties
+     * from multiple postfixes based on their priorities.
      *
-     * @param postfix the postfix associated with the YAML object
+     * @param postfix           the postfix associated with the YAML object
      * @param postfixPriorities the list of postfix priorities to consider if the specified postfix is not found
-     * @param path the property path to read
-     * @param clazz the class type to which the property value should be converted
-     *
-     * @return an Optional containing the property value if found and successfully converted, or an empty Optional otherwise
-     * @param <T> the type of the property value
+     * @param path              the property path to read
+     * @param clazz             the class type to which the property value should be converted
+     * @param <T>               the type of the property value
+     * @return an Optional containing the property value if found and successfully converted, or an empty Optional
+     * otherwise
      */
     @Override
     public <T> Optional<T> readProperty(String postfix, List<String> postfixPriorities, String path, Class<T> clazz) {
+        CacheKey cacheKey = new CacheKey(postfix, postfixPriorities, path, clazz);
+        Object cachedRead = readFromCache(cacheKey);
+
+        // If cached read is present, e.g. non-null Optional, return it (be it empty or non-empty)
+        if (cachedRead instanceof Optional) {
+            return (Optional<T>) cachedRead;
+        }
+
         List<Object> elements = new ArrayList<>();
-        String currentPostfix = postfix == null ? (!postfixPriorities.isEmpty() ? postfixPriorities.get(0) : null) : postfix;
+        String currentPostfix =
+            postfix == null ? (!postfixPriorities.isEmpty() ? postfixPriorities.get(0) : null) : postfix;
         int currentIndex = postfix != null ? -1 : 0;
 
         while (currentPostfix != null) {
@@ -106,27 +148,27 @@ public class SnakeYamlSerializer extends Serializer<Object> {
         }
 
         if (elements.isEmpty()) {
-            return Optional.empty();
+            return writeToCache(cacheKey, Optional.empty());
         }
 
         Object firstElement = elements.get(0);
 
         if (firstElement == null) {
-            return Optional.empty();
+            return writeToCache(cacheKey, Optional.empty());
         }
 
         if (firstElement instanceof Map) {
             Map<String, Object> mergedMap = mergeObjects(elements);
-            return Optional.ofNullable(convertToType(mergedMap, clazz));
+            return writeToCache(cacheKey, Optional.ofNullable(convertToType(mergedMap, clazz)));
         }
 
         if (firstElement instanceof List) {
             List<Object> mergedList = mergeLists(elements);
-            return Optional.ofNullable(convertToType(mergedList, clazz));
+            return writeToCache(cacheKey, Optional.ofNullable(convertToType(mergedList, clazz)));
         }
 
         // For primitives, just return the first one
-        return Optional.ofNullable(convertToType(firstElement, clazz));
+        return writeToCache(cacheKey, Optional.ofNullable(convertToType(firstElement, clazz)));
     }
 
     /**
@@ -173,10 +215,9 @@ public class SnakeYamlSerializer extends Serializer<Object> {
     }
 
     /**
-     * Deeply merges the source map into the target map. For overlapping keys:
-     * - If both values are maps, they are merged recursively.
-     * - If both values are lists, they are concatenated.
-     * - Otherwise, the source value overwrites the target value.
+     * Deeply merges the source map into the target map. For overlapping keys: - If both values are maps, they are
+     * merged recursively. - If both values are lists, they are concatenated. - Otherwise, the source value overwrites
+     * the target value.
      *
      * @param source the source map to merge from
      * @param target the target map to merge into
@@ -207,9 +248,9 @@ public class SnakeYamlSerializer extends Serializer<Object> {
      * Converts the given object to the specified class type.
      *
      * @param object the object to convert
-     * @param clazz the target class type
+     * @param clazz  the target class type
+     * @param <T>    the type of the target class
      * @return the converted object, or null if the input object is null
-     * @param <T> the type of the target class
      */
     @SuppressWarnings("unchecked")
     private <T> T convertToType(Object object, Class<T> clazz) {
@@ -239,7 +280,8 @@ public class SnakeYamlSerializer extends Serializer<Object> {
         }
 
         if (clazz == Integer.class || clazz == int.class) {
-            return (T) (Integer) (object instanceof Number ? ((Number) object).intValue() : Integer.parseInt(object.toString()));
+            return (T) (Integer) (object instanceof Number ? ((Number) object).intValue()
+                : Integer.parseInt(object.toString()));
         }
 
         if (clazz == Boolean.class || clazz == boolean.class) {
@@ -247,23 +289,28 @@ public class SnakeYamlSerializer extends Serializer<Object> {
         }
 
         if (clazz == Double.class || clazz == double.class) {
-            return (T) (Double) (object instanceof Number ? ((Number) object).doubleValue() : Double.parseDouble(object.toString()));
+            return (T) (Double) (object instanceof Number ? ((Number) object).doubleValue()
+                : Double.parseDouble(object.toString()));
         }
 
         if (clazz == Long.class || clazz == long.class) {
-            return (T) (Long) (object instanceof Number ? ((Number) object).longValue() : Long.parseLong(object.toString()));
+            return (T) (Long) (object instanceof Number ? ((Number) object).longValue()
+                : Long.parseLong(object.toString()));
         }
 
         if (clazz == Float.class || clazz == float.class) {
-            return (T) (Float) (object instanceof Number ? ((Number) object).floatValue() : Float.parseFloat(object.toString()));
+            return (T) (Float) (object instanceof Number ? ((Number) object).floatValue()
+                : Float.parseFloat(object.toString()));
         }
 
         if (clazz == Short.class || clazz == short.class) {
-            return (T) (Short) (object instanceof Number ? ((Number) object).shortValue() : Short.parseShort(object.toString()));
+            return (T) (Short) (object instanceof Number ? ((Number) object).shortValue()
+                : Short.parseShort(object.toString()));
         }
 
         if (clazz == Byte.class || clazz == byte.class) {
-            return (T) (Byte) (object instanceof Number ? ((Number) object).byteValue() : Byte.parseByte(object.toString()));
+            return (T) (Byte) (object instanceof Number ? ((Number) object).byteValue()
+                : Byte.parseByte(object.toString()));
         }
 
         if (clazz == Character.class || clazz == char.class) {
@@ -283,7 +330,7 @@ public class SnakeYamlSerializer extends Serializer<Object> {
      * Retrieves an element from a nested YAML object using a dot-separated path.
      *
      * @param yamlObject the root YAML object (typically a Map)
-     * @param path the dot-separated path to the desired element (e.g., "parent.child.key")
+     * @param path       the dot-separated path to the desired element (e.g., "parent.child.key")
      * @return the element at the specified path, or null if not found
      */
     protected Object getElementByPath(Object yamlObject, String path) {
@@ -311,17 +358,19 @@ public class SnakeYamlSerializer extends Serializer<Object> {
     }
 
     /**
-     * This method is unsupported in SnakeYamlSerializer. Use {@link #readProperty(String, List, String, Class)} instead.
+     * This method is unsupported in SnakeYamlSerializer. Use {@link #readProperty(String, List, String, Class)}
+     * instead.
      *
      * @param postfix the postfix associated with the YAML object
-     * @param path the property path to read
-     * @param clazz the class type to which the property value should be converted
+     * @param path    the property path to read
+     * @param clazz   the class type to which the property value should be converted
+     * @param <T>     the type of the property value
      * @return nothing, always throws UnsupportedOperationException
-     * @param <T> the type of the property value
      * @throws UnsupportedOperationException always
      */
     @Override
     public <T> Optional<T> readProperty(String postfix, String path, Class<T> clazz) {
-        throw new UnsupportedOperationException("Use readProperty with postfixPriorities for correct YAML merging behavior.");
+        throw new UnsupportedOperationException(
+            "Use readProperty with postfixPriorities for correct YAML merging behavior.");
     }
 }
