@@ -235,9 +235,13 @@ public class Keqing {
 
         // File path will be for example ./data/lang, where the files will be ./data/lang_en.yaml, ./data/lang_cs
         // .properties, etc.
-        File fileTemplate = new File(filePathTemplate);
-        Path directory = fileTemplate.getParentFile().toPath();
-        String filePrefix = fileTemplate.getName();
+        String separatorChar = filePathTemplate.contains("/") ? "/"
+            : (filePathTemplate.contains("\\") ? "\\" : File.separator); // Windows style path support
+        String directoryPath = filePathTemplate.contains(separatorChar) ? filePathTemplate
+            .substring(0, filePathTemplate.lastIndexOf(separatorChar)) : ".";
+        Path directory = new File(directoryPath).toPath();
+        String filePrefix = filePathTemplate.contains(separatorChar) ? filePathTemplate.substring(
+            filePathTemplate.lastIndexOf(separatorChar) + 1) : filePathTemplate;
 
         try (Stream<Path> files = Files.list(directory).filter(Files::isRegularFile)) {
             files.forEach(file -> {
