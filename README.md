@@ -2,7 +2,9 @@
 
 # Keqing
 
-<img src="https://akasha.iwakura.enterprises/data-source/hetzner/public/logo/keqing.png" alt="Keqing logo" width="300" border-effect="rounded"/>
+<div align="center">
+    <img src="https://akasha.iwakura.enterprises/data-source/hetzner/public/logo/keqing.png" alt="Keqing logo" width="300" border-effect="rounded"/>
+</div>
 
 Keqing is a Java library designed to help with language files and configuration files in complex projects. It provides
 a way to create "priorities" between the files and fill out any missing data from lower priority files. Using Keqing
@@ -49,9 +51,9 @@ Maven Central.
 
 | Name               | Description                                         | Version                                                                   |
 |--------------------|-----------------------------------------------------|---------------------------------------------------------------------------|
-| `keqing-core`      | The core module, required for all other modules.    | <include from="Maven-Versions.md" element-id="keqing_core_version"/>      |
-| `keqing-gson`      | Module for working with JSON files using Gson.      | <include from="Maven-Versions.md" element-id="keqing_gson_version"/>      |
-| `keqing-snakeyaml` | Module for working with YAML files using SnakeYAML. | <include from="Maven-Versions.md" element-id="keqing_snakeyaml_version"/> |
+| `keqing-core`      | The core module, required for all other modules.    | <a id="keqing_core_version" href="https://central.sonatype.com/artifact/enterprises.iwakura/keqing-core"><img src="https://maven-badges.sml.io/sonatype-central/enterprises.iwakura/keqing-core/badge.png?style=for-the-badge" alt=""></img></a>      |
+| `keqing-gson`      | Module for working with JSON files using Gson.      | <a id="keqing_gson_version" href="https://central.sonatype.com/artifact/enterprises.iwakura/keqing-gson"><img src="https://maven-badges.sml.io/sonatype-central/enterprises.iwakura/keqing-gson/badge.png?style=for-the-badge" alt=""></img></a>      |
+| `keqing-snakeyaml` | Module for working with YAML files using SnakeYAML. | <a id="keqing_snakeyaml_version" href="https://central.sonatype.com/artifact/enterprises.iwakura/keqing-snakeyaml"><img src="https://maven-badges.sml.io/sonatype-central/enterprises.iwakura/keqing-snakeyaml/badge.png?style=for-the-badge" alt=""></img></a> |
 
 > Java 8 or higher is required.
 
@@ -59,40 +61,35 @@ Maven Central.
 You might need to click the version badge to see the latest version.
 </note>
 
-<tabs>
-    <tab id="gradle" title="Gradle">
-        <code-block lang="groovy">
-            implementation 'enterprises.iwakura:keqing-core:VERSION'
-            implementation 'enterprises.iwakura:keqing-gson:VERSION'
-            implementation 'enterprises.iwakura:keqing-snakeyaml:VERSION'
-            // For keqing-gson and keqing-snakeyaml, GSON or SnakeYAML respectively
-            // are required as well.
-        </code-block>
-    </tab>
-    <tab id="maven" title="Maven">
-        <code-block lang="xml">
-            <![CDATA[
-            <dependency>
-                <groupId>enterprises.iwakura</groupId>
-                <artifactId>keqing-core</artifactId>
-                <version>VERSION</version>
-            </dependency>
-            <dependency>
-                <groupId>enterprises.iwakura</groupId>
-                <artifactId>keqing-gson</artifactId>
-                <version>VERSION</version>
-            </dependency>
-            <dependency>
-                <groupId>enterprises.iwakura</groupId>
-                <artifactId>keqing-snakeyaml</artifactId>
-                <version>VERSION</version>
-            </dependency>
-            <!-- For keqing-gson and keqing-snakeyaml, GSON or SnakeYAML respectively
-                 are required as well. -->
-            ]]>
-        </code-block>
-    </tab>
-</tabs>
+### Gradle
+```groovy
+implementation 'enterprises.iwakura:keqing-core:VERSION'
+implementation 'enterprises.iwakura:keqing-gson:VERSION'
+implementation 'enterprises.iwakura:keqing-snakeyaml:VERSION'
+// For keqing-gson and keqing-snakeyaml, GSON or SnakeYAML respectively
+// are required as well.
+```
+
+### Maven
+```xml
+<dependency>
+    <groupId>enterprises.iwakura</groupId>
+    <artifactId>keqing-core</artifactId>
+    <version>VERSION</version>
+</dependency>
+<dependency>
+    <groupId>enterprises.iwakura</groupId>
+    <artifactId>keqing-gson</artifactId>
+    <version>VERSION</version>
+</dependency>
+<dependency>
+    <groupId>enterprises.iwakura</groupId>
+    <artifactId>keqing-snakeyaml</artifactId>
+    <version>VERSION</version>
+</dependency>
+<!-- For keqing-gson and keqing-snakeyaml, GSON or SnakeYAML respectively
+     are required as well. -->
+```
 
 ## Loading files
 
