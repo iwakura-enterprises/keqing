@@ -12,7 +12,7 @@ you can easily manage multiple language files and ensure that your application a
 correctly.
 
 [Source Code](https://github.com/iwakura-enterprises/keqing) —
-[Documentation](https://docs.iwakura.enterprises/keqing/) —
+[Documentation](https://docs.iwakura.enterprises/keqing.html) —
 [Maven Central](https://central.sonatype.com/artifact/enterprises.iwakura/keqing)
 
 <procedure>
